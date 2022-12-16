@@ -816,7 +816,20 @@ void ViewerPrivate::displayMessage()
         htmlWriter()->write(QStringLiteral("<p></p>"));
     }
 
-    parseContent(mMessage.data());
+    const KMime::Message::Ptr localMessage = mMessage;
+    // parseContent can end up calling libkleo that sometimes starts an event loop
+    // which means that it can happen that the user very quickly click on a different
+    // email and the mMessage we were processing inside parseContent is gone
+    // by keeping a shared pointer locally we make sure this doesn't happen
+    parseContent(localMessage.data());
+    if (localMessage != mMessage) {
+        // when that happens, reset the html view because we would be showing the wrong
+        // content there. I (aacid) have only been able to reliable reproduce this problem
+        // if switching very fast between emails the first time an email with signature info
+        // is being loaded, so as far as user experience goes is not the most terriblest
+        htmlWriter()->reset();
+        return;
+    }
     mMimePartTree->setRoot(mNodeHelper->messageWithExtraContent(mMessage.data()));
     mColorBar->update();
 
